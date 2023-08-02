@@ -4,6 +4,9 @@ class PolyM:
     def __init__(self, coeffs):
         self.coeffs = coeffs
 
+    def values(self):
+        return self.coeffs
+
     def __mul__(self, other):
         if not isinstance(other, PolyM):
             raise TypeError()
