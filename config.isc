@@ -1,0 +1,6 @@
+command="learning_atiyah/train.py"
+output_path="~"
+venv_path="/mnt/Client/strongcompute_michael/.cache/pypoetry/virtualenvs/learning-atiyah-52SuUfJh-py3.10"
+gpu_type="24GB VRAM GPU"
+nnodes=6
+experiment_name="atiyah"
