@@ -24,10 +24,9 @@
 
           buildInputs = with pkgs; [
             python310
-	    python310Packages.matplotlib
             python310Packages.pytorch
-          ];
-
+            python310Packages.tensorboard
+	  ];
 
           shellHook = ''
           '';

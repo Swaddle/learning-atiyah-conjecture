@@ -3,8 +3,10 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 import torch.nn as nn
 import torch.optim as optim
-
 from torch.nn import CrossEntropyLoss 
+from torch.utils.tensorboard import SummaryWriter
+writer = SummaryWriter()
+
 from learning_atiyah import PolyM, SimpleLinear
 
 from functools import reduce 
@@ -67,22 +69,23 @@ def gen_batch(n_points: int, bz: int):
     return torch.stack(inpts), torch.stack(targets)
 
 def train():
-    num_iters = 1000 
+    num_iters = 10000 
     n_points = 4
     input_dim = n_points ** 2
     
-    model = SimpleLinear(input_dim, n_points, 64)
+    model = SimpleLinear(input_dim, n_points, 2048)
     criterion = CrossEntropyLoss()
-    optimizer = torch.optim.AdamW(model.parameters(),lr=0.01)
+    optimizer = torch.optim.AdamW(model.parameters(),lr=0.00005)
 
     for k in range(num_iters):
-        inpt, target = gen_batch(n_points,16)
+        inpt, target = gen_batch(n_points, 32)
         outpt = model(inpt)
         loss = criterion(outpt, target)
         loss.backward()
         optimizer.step()
-
-        print(loss)
+        writer.add_scalar("Loss/train", loss, k)
 
 if __name__ == "__main__":
     train()
+
+writer.flush()

@@ -8,11 +8,15 @@ class SimpleLinear(Module):
         self.out_dim = out_dim
         self.l1 = Linear(in_dim, d)
         self.l2 = Linear(d,d)
-        self.l3 = Linear(d, out_dim) 
+        self.l3 = Linear(d,d)
+        self.l4 = Linear(d,d)
+        self.l5 = Linear(d, out_dim) 
 
     def forward(self,x):
         x = relu(self.l1(x))
         x = relu(self.l2(x))
-        x = self.l3(x)
+        x = relu(self.l3(x))
+        x = relu(self.l4(x))
+        x = self.l5(x)
         return x
 
