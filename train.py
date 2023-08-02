@@ -4,7 +4,9 @@ import torch.multiprocessing as mp
 import torch.nn as nn
 import torch.optim as optim
 
-from poly import PolyM
+from torch.nn import CrossEntropyLoss 
+from learning_atiyah import PolyM, SimpleLinear
+
 from functools import reduce 
 
 def one_hot(tensor):
@@ -56,20 +58,31 @@ def gen_random_sample_2d(n_points: int):
     return sample, classification 
 
 def gen_batch(n_points: int, bz: int): 
-    input = []
-    output = []
+    inpts = []
+    targets = []
     for k in range(bz):
         sample, cls = gen_random_sample_2d(n_points)
-        input.append(sample.flatten()) 
-        output.append(cls) 
-    return torch.stack(input), torch.stack(output)
+        inpts.append(sample.flatten()) 
+        targets.append(cls) 
+    return torch.stack(inpts), torch.stack(targets)
 
 def train():
-    num_epochs = 10 
+    num_iters = 1000 
     n_points = 4
     input_dim = n_points ** 2
-    # (x_i, y_i)
-    input, output = gen_batch(n_points,16)
+    
+    model = SimpleLinear(input_dim, n_points, 64)
+    criterion = CrossEntropyLoss()
+    optimizer = torch.optim.AdamW(model.parameters(),lr=0.01)
+
+    for k in range(num_iters):
+        inpt, target = gen_batch(n_points,16)
+        outpt = model(inpt)
+        loss = criterion(outpt, target)
+        loss.backward()
+        optimizer.step()
+
+        print(loss)
 
 if __name__ == "__main__":
     train()
