@@ -3,7 +3,7 @@ name = "learning-atiyah"
 version = "0.1.0"
 description = ""
 readme = "README.md"
-authors = ["Fennecs <meswaddle@gmail.com>"]
+authors = ["Fennecs Swaddle <meswaddle@gmail.com>"]
 packages = [{include = "learning_atiyah"}]
 
 [tool.poetry.dependencies]
