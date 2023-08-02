@@ -78,7 +78,7 @@ def train():
     optimizer = torch.optim.AdamW(model.parameters(),lr=0.00005)
 
     for k in range(num_iters):
-        inpt, target = gen_batch(n_points, 32)
+        inpt, target = gen_batch(n_points, 512)
         outpt = model(inpt)
         loss = criterion(outpt, target)
         loss.backward()
