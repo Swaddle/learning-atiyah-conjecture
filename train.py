@@ -5,11 +5,17 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.nn import CrossEntropyLoss 
 from torch.utils.tensorboard import SummaryWriter
+
 writer = SummaryWriter()
 
 from learning_atiyah import PolyM, SimpleLinear
 
 from functools import reduce 
+from itertools import cycle 
+
+import os 
+
+from strong_checkpoints import Checkpointer
 
 def one_hot(tensor):
     max_index = torch.argmax(tensor.abs())
@@ -73,16 +79,29 @@ def train():
     n_points = 4
     input_dim = n_points ** 2
     
-    model = SimpleLinear(input_dim, n_points, 2048)
+    dist.init_process_group(backend="nccl")
+    local_rank = int(os.environ["LOCAL_RANK"])
+
+    model = SimpleLinear(input_dim, n_points, 1024)
+    
     criterion = CrossEntropyLoss()
     optimizer = torch.optim.AdamW(model.parameters(),lr=0.00005)
+    
+    if local_rank==0:
+        checkpointer = Checkpointer({"model": model.state_dict()})
+    
+    data =  cycle((gen_batch(n_points,32) for k in range(1000))) 
 
-    for k in range(num_iters):
-        inpt, target = gen_batch(n_points, 512)
+    for k, (inpt, target) in enumerate(data):
         outpt = model(inpt)
         loss = criterion(outpt, target)
         loss.backward()
         optimizer.step()
+        
+        if local_rank == 0:    
+            if k%500==0:
+                checkpointer.save()
+
         writer.add_scalar("Loss/train", loss, k)
 
 if __name__ == "__main__":

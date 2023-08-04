@@ -7,10 +7,10 @@ class SimpleLinear(Module):
         self.in_dim = in_dim
         self.out_dim = out_dim
         self.l1 = Linear(in_dim, d)
-        self.l2 = Linear(d,d)
-        self.l3 = Linear(d,d)
-        self.l4 = Linear(d,d)
-        self.l5 = Linear(d, out_dim) 
+        self.l2 = Linear(d,2*d)
+        self.l3 = Linear(2*d,4*d)
+        self.l4 = Linear(4*d,2*d)
+        self.l5 = Linear(2*d, out_dim) 
 
     def forward(self,x):
         x = relu(self.l1(x))
