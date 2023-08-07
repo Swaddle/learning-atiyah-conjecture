@@ -15,14 +15,11 @@ from itertools import cycle
 
 import os 
 
-from strong_checkpoints import Checkpointer
-
 def one_hot(tensor):
     max_index = torch.argmax(tensor.abs())
     one_hot = torch.zeros_like(tensor)
     one_hot[max_index] = 1
     return one_hot
-
 
 def gen_random_sample_2d(n_points: int):
     p = torch.randn(n_points,2)
@@ -74,21 +71,44 @@ def gen_batch(n_points: int, bz: int):
         targets.append(cls) 
     return torch.stack(inpts), torch.stack(targets)
 
+
+def all_reduce_params(module):
+    for param in module.parameters():
+        dist.all_reduce(param.data, op=dist.ReduceOp.SUM)
+
+def multiply_params(module, mult_fact):
+    for param in module.parameters():
+        param.data = param.data * mult_fact
+
+def all_reduce_grads(module):
+    for param in module.parameters():
+        dist.all_reduce(param.grad.data, op=dist.ReduceOp.SUM)
+
+def multiply_grads(module, mult_fact):
+    for param in module.parameters():
+        param.grad.data = param.grad.data * mult_fact
+
 def train():
-    num_iters = 10000 
+    num_iters = 100000 
     n_points = 4
     input_dim = n_points ** 2
     
+    save_path = "/home/michael/checkpoints/latest.pt"
+
     dist.init_process_group(backend="nccl")
+
     local_rank = int(os.environ["LOCAL_RANK"])
+    world_size = dist.get_world_size()
 
     model = SimpleLinear(input_dim, n_points, 1024)
     
+    if os.path.isfile(save_path):
+        checkpoint = torch.load(save_path)
+        model.load_state_dict(checkpoint["model"])
+        model.train() 
+
     criterion = CrossEntropyLoss()
     optimizer = torch.optim.AdamW(model.parameters(),lr=0.00005)
-    
-    if local_rank==0:
-        checkpointer = Checkpointer({"model": model.state_dict()})
     
     data =  cycle((gen_batch(n_points,32) for k in range(1000))) 
 
@@ -96,11 +116,21 @@ def train():
         outpt = model(inpt)
         loss = criterion(outpt, target)
         loss.backward()
+
+        all_reduce_grads(model)
+        multiply_grads(model,1.0/world_size) 
+        
         optimizer.step()
         
+
         if local_rank == 0:    
             if k%500==0:
-                checkpointer.save()
+                torch.save(
+                    {
+                        "model":model.state_dict()
+                    },
+                    save_path
+                )
 
         writer.add_scalar("Loss/train", loss, k)
 
