@@ -100,7 +100,7 @@ def train():
     local_rank = int(os.environ["LOCAL_RANK"])
     world_size = dist.get_world_size()
 
-    model = SimpleLinear(input_dim, n_points, 1024)
+    local_model = SimpleLinear(input_dim, n_points, 1024)
     
     if os.path.isfile(save_path):
         checkpoint = torch.load(save_path)
@@ -108,26 +108,26 @@ def train():
         model.train() 
 
     criterion = CrossEntropyLoss()
-    optimizer = torch.optim.AdamW(model.parameters(),lr=0.00005)
+    local_optimizer = torch.optim.AdamW(local_model.parameters(),lr=0.00005)
     
     data =  cycle((gen_batch(n_points,32) for k in range(1000))) 
 
     for k, (inpt, target) in enumerate(data):
-        outpt = model(inpt)
+        outpt = local_model(inpt)
         loss = criterion(outpt, target)
         loss.backward()
 
         all_reduce_grads(model)
         multiply_grads(model,1.0/world_size) 
         
-        optimizer.step()
+        local_optimizer.step()
         
 
         if local_rank == 0:    
             if k%500==0:
                 torch.save(
                     {
-                        "model":model.state_dict()
+                        "model":local_model.state_dict()
                     },
                     save_path
                 )
