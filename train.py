@@ -62,14 +62,14 @@ def gen_random_sample_2d(n_points: int):
     classification = one_hot(dots) 
     return sample, classification 
 
-def gen_batch(n_points: int, bz: int): 
+def gen_batch(n_points: int, bz: int, device_id: int): 
     inpts = []
     targets = []
     for k in range(bz):
         sample, cls = gen_random_sample_2d(n_points)
         inpts.append(sample.flatten()) 
         targets.append(cls) 
-    return torch.stack(inpts), torch.stack(targets)
+    return torch.stack(inpts).to(device=device_id), torch.stack(targets).to(device=device_id)
 
 
 def all_reduce_params(module):
@@ -93,7 +93,7 @@ def train():
     n_points = 4
     input_dim = n_points ** 2
     
-    save_path = "/home/michael/checkpoints/latest.pt"
+    save_path = "/mnt/Client/strongcompute_michael/checkpoints/latest.pt"
 
     dist.init_process_group(backend="nccl")
 
@@ -101,24 +101,25 @@ def train():
     world_size = dist.get_world_size()
 
     local_model = SimpleLinear(input_dim, n_points, 1024)
-    
+    local_model.to(device=local_rank)
+
     if os.path.isfile(save_path):
         checkpoint = torch.load(save_path)
-        model.load_state_dict(checkpoint["model"])
-        model.train() 
+        local_model.load_state_dict(checkpoint["model"])
+        local_model.train() 
 
     criterion = CrossEntropyLoss()
     local_optimizer = torch.optim.AdamW(local_model.parameters(),lr=0.00005)
     
-    data =  cycle((gen_batch(n_points,32) for k in range(1000))) 
+    data =  cycle((gen_batch(n_points,32, local_rank) for k in range(1000))) 
 
     for k, (inpt, target) in enumerate(data):
         outpt = local_model(inpt)
         loss = criterion(outpt, target)
         loss.backward()
 
-        all_reduce_grads(model)
-        multiply_grads(model,1.0/world_size) 
+        all_reduce_grads(local_model)
+        multiply_grads(local_model,1.0/world_size) 
         
         local_optimizer.step()
         
