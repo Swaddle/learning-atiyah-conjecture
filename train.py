@@ -142,34 +142,37 @@ def train():
     batch_size = 32 
 
     data =  (gen_batch(n_points,batch_size, local_rank) for k in range(100)) 
+    
+    n_epochs = 5
 
-    for k, (inpt, target) in enumerate(data):
-        outpt = local_model(inpt)
-        loss = criterion(outpt, target)
-        loss.backward()
+    for e in range(n_epochs): 
+        for k, (inpt, target) in enumerate(data):
+            outpt = local_model(inpt)
+            loss = criterion(outpt, target)
+            loss.backward()
 
-        all_reduce_grads(local_model)
-        multiply_grads(local_model,1.0/world_size) 
+            all_reduce_grads(local_model)
+            multiply_grads(local_model,1.0/world_size) 
         
-        local_optimizer.step()
+            local_optimizer.step()
         
-        if (k+1)%100==0:
-            scheduler.step() 
+            if (k+1)%100==0:
+                scheduler.step() 
 
-        if local_rank == 0:      
+            if local_rank == 0:      
             
-            if k%50==0:
-                print("loss:", loss) 
+                if k%50==0:
+                    print("loss:", loss) 
         
-            if k%500==0:
-                torch.save(
+                if k%500==0:
+                    torch.save(
                     {
                         "model":local_model.state_dict()
                     },
                     save_path
-                )
+                    )
 
-        writer.add_scalar("Loss/train", loss, k)
+            writer.add_scalar("Loss/train", loss, k)
 
 if __name__ == "__main__":
     train()
