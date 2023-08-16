@@ -28,8 +28,8 @@ def one_hot(tensor):
     one_hot[max_index] = 1
     return one_hot
 
-def prep_input(p,v):
-    v = v.unsqueeze(0)
+def cat_input(p,v):
+    v = v.unsqueeze(0).transpose(0,1)
     return torch.cat((p,v),1)
     
 def gen_random_sample_2d(n_points: int):
@@ -83,7 +83,7 @@ def gen_batch(n_points: int, bz: int, device_id: int):
     targets = []
     for k in range(bz):
         (p,v), cls = gen_random_sample_2d(n_points)
-        sample = prep_input(p,v)
+        sample = cat_input(p,v)
         inpts.append(sample.flatten()) 
         targets.append(cls) 
     return torch.stack(inpts).to(device=device_id), torch.stack(targets).to(device=device_id)
@@ -141,7 +141,7 @@ def train():
 
     batch_size = 32 
 
-    data =  (gen_batch(n_points,batch_size, local_rank) for k in range(10000)) 
+    data =  (gen_batch(n_points,batch_size, local_rank) for k in range(100)) 
 
     for k, (inpt, target) in enumerate(data):
         outpt = local_model(inpt)
@@ -158,7 +158,7 @@ def train():
 
         if local_rank == 0:      
             
-            if k%100==0:
+            if k%50==0:
                 print("loss:", loss) 
         
             if k%500==0:
