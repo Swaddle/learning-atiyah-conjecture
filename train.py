@@ -1,8 +1,5 @@
 import torch
 import torch.distributed as dist
-import torch.multiprocessing as mp
-import torch.nn as nn
-import torch.optim as optim
 import torch.optim.lr_scheduler as lr_scheduler
 
 from torch.nn import CrossEntropyLoss 
@@ -10,73 +7,34 @@ from torch.utils.tensorboard import SummaryWriter
 
 writer = SummaryWriter()
 
-from learning_atiyah import PolyM, SimpleLinear
+from learning_atiyah import PolyM, SimpleLinear, gen_random_sample_2d
 
-from functools import reduce, partial
+from functools import  partial
 from itertools import cycle 
-
+ 
 import os 
-
+from random import sample 
 
 def lr_lambda(initial_lr, step):
     factor = 0.01
     return initial_lr/(1+factor*step)
 
-def one_hot(tensor):
-    max_index = torch.argmax(tensor.abs())
-    one_hot = torch.zeros_like(tensor)
-    one_hot[max_index] = 1
-    return one_hot
-
 def cat_input(p,v):
     v = v.unsqueeze(0).transpose(0,1)
     return torch.cat((p,v),1)
     
-def gen_random_sample_2d(n_points: int):
-    p = torch.randn(n_points,2)
-    v = torch.randn(n_points)
-    dots = torch.empty(n_points)
+def filtered_range_mod_n(start,stop,n):
+    c = range(start, stop)
+    c = filter(lambda x : (x % n) != 0 , c)
+    return c
 
-    # differences
-    # ps[j,k] = p[j] - p[k]
-    ps = p.unsqueeze(1) -  p.unsqueeze(0)
-    # sum of x_ij^2 + y_ij^2
-    M = ps.square().sum(2).sqrt()
-    xs = ps[:,:,0]
-
-    Xi = torch.stack(( (M + xs).sqrt() , (M - xs).sqrt())) 
-    
-    #coeff_tensors = []
-    
-    for j in range(n_points):
-        poly_j = []
-        for k in range(n_points): 
-            if j==k:
-                continue 
-            else:
-                y_jk = ps[j,k][1]
-                if y_jk < 0:
-                    poly_j.append(PolyM([-Xi[1][j,k], Xi[0][j,k]]))
-                elif y_jk > 0:
-                    poly_j.append(PolyM([ Xi[0][j,k], Xi[1][j,k]]))
-                else:  # y_jk =0 
-                    x_jk = ps[j,k][0]
-                    if x_jk < 0:
-                        poly_j.append(PolyM([Xi[0][j,k], Xi[1][j,k]]))
-                    else:
-                        poly_j.append(PolyM([Xi[0][j,k], Xi[1][j,k]]))
-        
-        prod_poly_j = reduce((lambda x, y: x * y), poly_j).values()
-        coeffs = torch.stack(prod_poly_j)        
-        dots[j] = torch.dot(coeffs, v) 
-        
-        #coeff_tensors.append(coeffs)
-    
-    #sample = torch.stack(coeff_tensors)
-    sample = (p, v)
-
-    classification = one_hot(dots) 
-    return sample , classification 
+def Sn_cycle_point_aug(p, one_hot_class):
+    # length
+    n = p.shape[0]
+    s= sample(filtered_range_mod_n(0,100,n)) 
+    p.roll(s, 0)
+    one_hot_class(s,0)
+    return (p, one_hot_class)
 
 def gen_batch(n_points: int, bz: int, device_id: int): 
     inpts = []
