@@ -103,7 +103,8 @@ def train():
 
         # reset to continue iter
         current_step = 0
-    return "ok"
+
+
 
 if __name__ == "__main__":
     train()
