@@ -1,8 +1,8 @@
-from itertools import reduce
+from functools import reduce
 
 from torch import argmax, dot, empty, randn, stack, zeros_like
 
-from learning_atiyah import PolyM
+from .poly import PolyM
 
 
 def one_hot(tensor):

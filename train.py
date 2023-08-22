@@ -8,8 +8,10 @@ writer = SummaryWriter()
 
 import os
 from functools import partial
+import random
 
 from learning_atiyah import SimpleLinear, gen_random_sample_2d
+from itertools import islice
 
 
 def lr_lambda(initial_lr, step):
@@ -71,7 +73,8 @@ def train():
     input_dim = n_points * dim + dual_dim
     # = (dim + 1) * n_points
 
-    save_path = "/mnt/Client/strongcompute_michael/checkpoints/latest.pt"
+    save_path = "/mnt/Client/strongcompute_michael/checkpoints/latest_1024_300.pt"
+    temp_file = save_path + ".tmp"
 
     dist.init_process_group(backend="nccl")
     torch.manual_seed(0)
@@ -82,8 +85,10 @@ def train():
     local_model = SimpleLinear(input_dim, n_points, 1024)
     local_model.to(device=local_rank)
 
+    current_iter = 0
     if os.path.isfile(save_path):
         checkpoint = torch.load(save_path)
+        current_iter = checkpoint["step"]
         local_model.load_state_dict(checkpoint["model"])
         local_model.train()
 
@@ -96,12 +101,12 @@ def train():
 
     batch_size = 32
 
-    data = (gen_batch(n_points, batch_size, local_rank) for k in range(100))
+    data = (gen_batch(n_points, batch_size, local_rank) for k in range(300))
 
-    n_epochs = 5
+    n_epochs = 100
 
     for e in range(n_epochs):
-        for k, (inpt, target) in enumerate(data):
+        for k, (inpt, target) in islice(enumerate(data), current_iter, None):
             outpt = local_model(inpt)
             loss = criterion(outpt, target)
             loss.backward()
@@ -119,7 +124,10 @@ def train():
                     print("loss:", loss)
 
                 if k % 500 == 0:
-                    torch.save({"model": local_model.state_dict()}, save_path)
+                    torch.save(
+                        {"model": local_model.state_dict(), "step": k}, temp_file
+                    )
+                    os.replace(temp_file, save_path)
 
             writer.add_scalar("Loss/train", loss, k)
 
