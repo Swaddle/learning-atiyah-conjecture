@@ -54,7 +54,7 @@ def train():
     current_epoch = 0
 
     if os.path.isfile(latest_path):
-        with open(latest_path) as f:
+        with open(latest_path, "rb") as f:
             checkpoint = torch.load(f)
 
         current_step = checkpoint["checkpoint_step"]
@@ -82,7 +82,7 @@ def train():
 
             if local_rank == 0:
                 if k % 50 == 0:
-                    print("loss:", loss)
+                    print({"loss":loss, "step": k, "epoch":e})
 
                 if k % 500 == 0:
                     with open(temp_file, "wb") as f:
