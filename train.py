@@ -67,6 +67,7 @@ def train():
     data = (gen_batch(n_points, batch_size, local_rank) for k in range(num_samples))
 
     for e in islice(range(num_epochs), current_epoch, None):
+
         for k, (inpt, target) in islice(enumerate(data), current_step, None):
             outpt = local_model(inpt)
             loss = criterion(outpt, target)
@@ -98,9 +99,11 @@ def train():
                         )
                         f.flush()
                     os.replace(temp_file, latest_path)
+            #writer.add_scalar("Loss/train", loss, k)
 
-            # writer.add_scalar("Loss/train", loss, k)
-
+        # reset to continue iter
+        current_step = 0
+    return "ok"
 
 if __name__ == "__main__":
     train()
