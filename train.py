@@ -1,6 +1,6 @@
 import os
 from functools import partial
-from itertools import islice
+from itertools import islice, cycle
 
 import torch
 import torch.distributed as dist
@@ -23,7 +23,7 @@ def train():
     n_points = 4
     dual_dim = n_points
     batch_size = 32
-    num_samples = 300
+    num_samples = 100
     model_d = 1024
     num_epochs = 100
     initial_lr = 0.005
@@ -57,18 +57,18 @@ def train():
         with open(latest_path, "rb") as f:
             checkpoint = torch.load(f)
 
-        current_step = checkpoint["checkpoint_step"]
+        current_sample = checkpoint["checkpoint_sample"]
         current_epoch = checkpoint["checkpoint_epoch"]
         local_model.load_state_dict(checkpoint["local_model"])
         local_scheduler.load_state_dict(checkpoint["local_scheduler"])
         local_optimizer.load_state_dict(checkpoint["local_optimizer"])
         local_model.train()
+    
+    data = cycle(zip(range(num_samples), (gen_batch(n_points, batch_size, local_rank) for _ in range(num_samples))))
+    
+    for e in islice(range(num_epochs), current_epoch, num_epochs):
+        for idx, (inpt, target) in islice(data, current_sample, num_samples):
 
-    data = (gen_batch(n_points, batch_size, local_rank) for k in range(num_samples))
-
-    for e in islice(range(num_epochs), current_epoch, None):
-
-        for k, (inpt, target) in islice(enumerate(data), current_step, None):
             outpt = local_model(inpt)
             loss = criterion(outpt, target)
             loss.backward()
@@ -78,21 +78,23 @@ def train():
 
             local_optimizer.step()
 
-            if (k + 1) % 100 == 0:
+            del inpt, target  
+            
+            if (idx + 1) % 100 == 0:
                 local_scheduler.step()
 
             if local_rank == 0:
-                if k % 50 == 0:
-                    print({"loss":loss, "step": k, "epoch":e})
+                if idx % 50 == 0:
+                    print({"loss":loss, "sample": idx, "epoch":e})
 
-                if k % 500 == 0:
+                if idx % 500 == 0:
                     with open(temp_file, "wb") as f:
                         torch.save( 
                             {
                                 "local_model": local_model.state_dict(),
                                 "local_scheduler": local_scheduler.state_dict(),
                                 "local_optimizer": local_optimizer.state_dict(),
-                                "checkpoint_step": k,
+                                "checkpoint_sample": idx,
                                 "checkpoint_epoch": e,
                             },
                             f,
