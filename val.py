@@ -10,12 +10,12 @@ def val():
     n_points = 4
     dim = 2
     input_dim = n_points * (dim + 1)
-    save_path = "/mnt/Client/strongcompute_michael/checkpoints/latest.pt"
-    local_model = SimpleLinear(input_dim, n_points, 1024)
+    save_path = "/mnt/Client/strongcompute_michael/checkpoints/latest_2048_2_4_500_32.pt"
+    local_model = SimpleLinear(input_dim, n_points, 2048)
 
     if os.path.isfile(save_path):
         checkpoint = torch.load(save_path)
-        local_model.load_state_dict(checkpoint["model"])
+        local_model.load_state_dict(checkpoint["local_model"])
         local_model.eval()
 
     criterion = CrossEntropyLoss()
