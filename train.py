@@ -1,4 +1,4 @@
-import os
+from os import replace, environ
 from functools import partial
 from itertools import islice, cycle
 
@@ -17,14 +17,16 @@ from learning_atiyah import (
 
 # writer = SummaryWriter()
 
+from pathlib import Path
+
 
 def train():
     dim = 2
     n_points = 4
     dual_dim = n_points
     batch_size = 32
-    num_samples = 100
-    model_d = 1024
+    num_samples = 500
+    model_d = 2048
     num_epochs = 100
     initial_lr = 0.005
 
@@ -32,14 +34,15 @@ def train():
 
     input_dim = n_points * dim + dual_dim
     # = (dim + 1) * n_points
-
-    latest_path = f"/mnt/Client/strongcompute_michael/checkpoints/latest_{model_d}_{dim}_{n_points}_{num_samples}_{batch_size}.pt"
-    temp_file = latest_path + ".tmp"
+    
+    save_path_str = f"/mnt/Client/strongcompute_michael/checkpoints/latest_{model_d}_{dim}_{n_points}_{num_samples}_{batch_size}.pt"
+    latest_path = Path(save_path_str)
+    temp_path = Path(save_path_str+".tmp")
 
     dist.init_process_group(backend="nccl")
     torch.manual_seed(0)
 
-    local_rank = int(os.environ["LOCAL_RANK"])
+    local_rank = int(environ["LOCAL_RANK"])
     world_size = dist.get_world_size()
 
     local_model = SimpleLinear(input_dim, n_points, model_d)
@@ -50,22 +53,25 @@ def train():
     local_optimizer = torch.optim.SGD(local_model.parameters(), lr=initial_lr)
     local_scheduler = lr_scheduler.LambdaLR(local_optimizer, lr_lambda_func)
 
-    current_step = 0
+    current_sample = 0
     current_epoch = 0
 
-    if os.path.isfile(latest_path):
-        with open(latest_path, "rb") as f:
+    if latest_path.is_file():
+        with latest_path.open("rb") as f:
             checkpoint = torch.load(f)
-
         current_sample = checkpoint["checkpoint_sample"]
         current_epoch = checkpoint["checkpoint_epoch"]
         local_model.load_state_dict(checkpoint["local_model"])
         local_scheduler.load_state_dict(checkpoint["local_scheduler"])
         local_optimizer.load_state_dict(checkpoint["local_optimizer"])
         local_model.train()
+    else: 
+        latest_path.touch()  
     
     data = cycle(zip(range(num_samples), (gen_batch(n_points, batch_size, local_rank) for _ in range(num_samples))))
     
+    num_samples_seen = 0
+
     for e in islice(range(num_epochs), current_epoch, num_epochs):
         for idx, (inpt, target) in islice(data, current_sample, num_samples):
 
@@ -79,7 +85,9 @@ def train():
             local_optimizer.step()
 
             del inpt, target  
-            
+
+            num_samples_seen = num_samples_seen + 1 
+
             if (idx + 1) % 100 == 0:
                 local_scheduler.step()
 
@@ -87,8 +95,8 @@ def train():
                 if idx % 50 == 0:
                     print({"loss":loss, "sample": idx, "epoch":e})
 
-                if idx % 500 == 0:
-                    with open(temp_file, "wb") as f:
+                if num_samples_seen % 200 == 0:
+                    with temp_path.open("wb") as f:
                         torch.save( 
                             {
                                 "local_model": local_model.state_dict(),
@@ -100,11 +108,11 @@ def train():
                             f,
                         )
                         f.flush()
-                    os.replace(temp_file, latest_path)
+                    replace(temp_path, latest_path)
             #writer.add_scalar("Loss/train", loss, k)
 
         # reset to continue iter
-        current_step = 0
+        current_sample = 0
 
 
 
