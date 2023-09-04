@@ -2,7 +2,9 @@ from os import replace, environ
 from functools import partial
 from itertools import islice, cycle
 
-import torch
+from torch import manual_seed, save, load
+from torch.optim import SGD 
+
 import torch.distributed as dist
 import torch.optim.lr_scheduler as lr_scheduler
 from torch.nn import CrossEntropyLoss
@@ -24,9 +26,9 @@ def train():
     dim = 2
     n_points = 4
     dual_dim = n_points
-    batch_size = 32
+    batch_size = 16 
     num_samples = 500
-    model_d = 2048
+    model_d = 64
     num_epochs = 100
     initial_lr = 0.005
 
@@ -40,9 +42,10 @@ def train():
     temp_path = Path(save_path_str+".tmp")
 
     dist.init_process_group(backend="nccl")
-    torch.manual_seed(0)
+    manual_seed(0)
 
     local_rank = int(environ["LOCAL_RANK"])
+    global_rank = dist.get_rank()
     world_size = dist.get_world_size()
 
     local_model = SimpleLinear(input_dim, n_points, model_d)
@@ -50,27 +53,26 @@ def train():
 
     lr_lambda_func = partial(lr_lambda, initial_lr)
     criterion = CrossEntropyLoss()
-    local_optimizer = torch.optim.SGD(local_model.parameters(), lr=initial_lr)
+    local_optimizer = SGD(local_model.parameters(), lr=initial_lr)
     local_scheduler = lr_scheduler.LambdaLR(local_optimizer, lr_lambda_func)
 
     current_sample = 0
     current_epoch = 0
-
+    
     if latest_path.is_file():
         with latest_path.open("rb") as f:
-            checkpoint = torch.load(f)
+            checkpoint = load(f)
         current_sample = checkpoint["checkpoint_sample"]
         current_epoch = checkpoint["checkpoint_epoch"]
         local_model.load_state_dict(checkpoint["local_model"])
         local_scheduler.load_state_dict(checkpoint["local_scheduler"])
         local_optimizer.load_state_dict(checkpoint["local_optimizer"])
         local_model.train()
-    else: 
-        latest_path.touch()  
-    
+
+    # make every rank have different data
+    manual_seed(global_rank)
     data = cycle(zip(range(num_samples), (gen_batch(n_points, batch_size, local_rank) for _ in range(num_samples))))
-    
-    num_samples_seen = 0
+    num_batches_seen = 0
 
     for e in islice(range(num_epochs), current_epoch, num_epochs):
         for idx, (inpt, target) in islice(data, current_sample, num_samples):
@@ -86,18 +88,19 @@ def train():
 
             del inpt, target  
 
-            num_samples_seen = num_samples_seen + 1 
+            num_batches_seen = num_batches_seen + 1 
 
-            if (idx + 1) % 100 == 0:
+            if (num_batches_seen) % 100 == 0:
                 local_scheduler.step()
 
-            if local_rank == 0:
-                if idx % 50 == 0:
+            if global_rank == 0:
+                if num_batches_seen % 10 == 0:
                     print({"loss":loss, "sample": idx, "epoch":e})
 
-                if num_samples_seen % 200 == 0:
+                if num_batches_seen % 10 == 0:
+                    temp_path.touch()
                     with temp_path.open("wb") as f:
-                        torch.save( 
+                        save( 
                             {
                                 "local_model": local_model.state_dict(),
                                 "local_scheduler": local_scheduler.state_dict(),

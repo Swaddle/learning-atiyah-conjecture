@@ -1,7 +1,7 @@
 from functools import reduce
 from random import choice
 
-from torch import argmax, cat, dot, empty, randn, stack, zeros_like
+from torch import argmax, cat, dot, empty, randn, stack, zeros_like, manual_seed
 
 from .poly import PolyM
 
@@ -21,6 +21,8 @@ def cat_input(p, v):
 def gen_random_sample_2d(n_points: int):
     p = randn(n_points, 2)
     v = randn(n_points)
+   
+    
     dots = empty(n_points)
 
     # differences
