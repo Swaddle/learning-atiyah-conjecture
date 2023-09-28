@@ -4,6 +4,7 @@ from itertools import islice, cycle
 
 from torch import manual_seed, save, load
 from torch.optim import SGD 
+import torch.cuda as cuda
 
 import torch.distributed as dist
 import torch.optim.lr_scheduler as lr_scheduler
@@ -44,9 +45,10 @@ def train():
     dist.init_process_group(backend="nccl")
     manual_seed(0)
 
-    local_rank = int(environ["LOCAL_RANK"])
     global_rank = dist.get_rank()
     world_size = dist.get_world_size()
+    device_count = cuda.device_count()
+    local_rank = global_rank % device_count
 
     local_model = SimpleLinear(input_dim, n_points, model_d)
     local_model.to(device=local_rank)
@@ -74,7 +76,7 @@ def train():
     data = cycle(zip(range(num_samples), (gen_batch(n_points, batch_size, local_rank) for _ in range(num_samples))))
     num_batches_seen = 0
 
-    for e in islice(range(num_epochs), current_epoch, num_epochs):
+    for e in range(current_epoch, num_epochs):
         for idx, (inpt, target) in islice(data, current_sample, num_samples):
 
             outpt = local_model(inpt)
@@ -85,8 +87,6 @@ def train():
             multiply_grads(local_model, 1.0 / world_size)
 
             local_optimizer.step()
-
-            del inpt, target  
 
             num_batches_seen = num_batches_seen + 1 
 
